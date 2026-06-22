@@ -61,7 +61,7 @@ Pour que la lampe soit éteinte par défaut au démarrage, suivez ce schéma de 
 ## Installation & Utilisation
 
 1. Installez l'**IDE Arduino** sur votre ordinateur.
-2. Créez un nouveau croquis et collez-y le code disponible dans le dossier `Smart_lampe.ino` de ce dépôt.
+2. Créez un nouveau croquis et collez-y le code disponible dans le dossier `Smart_lampe_code.ino` de ce dépôt.
 3. Connectez votre carte Arduino en USB, sélectionnez le bon port COM et téléversez le programme.
 4. Réalisez le câblage basse tension, puis le câblage haute tension en respectant scrupuleusement les consignes de sécurité ci-dessus.
 5. Branchez la prise 220V. Passez votre main à environ 5-10 cm du capteur IR pour allumer ou éteindre la lampe !
