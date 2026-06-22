@@ -1,62 +1,60 @@
-// =====================================================================
-// PROJET : Commande de relais par capteur infrarouge (IR)
-// FONCTION : Un passage devant le capteur change l'état du relais (ON/OFF)
-// =====================================================================
+// --- 1. DÉCLARATION DES BROCHES ---
+const int brocheCapteur = 2;  // Définit la broche D2 pour lire le capteur IR (const = ne pourra pas être modifiée par erreur)
+const int brocheRelais = 3;   // Définit la broche D3 pour piloter le relais 
 
-// --- Définition des broches (Pinout) ---
-// Utilisation de 'const' pour figer les numéros de broches (gain de mémoire)
-const int irSensor = 8;    // Le capteur envoie 0 (LOW) quand il détecte un obstacle
-const int relayPin = 7;    // La broche qui pilote le module relais
+// --- 2. VARIABLES D'ÉTAT (La mémoire du programme) ---
+bool etatLampe = false;       // Stocke l'état virtuel de la lampe : "false" = éteinte / "true" = allumée
+int etatCapteurActuel;        // Va stocker la lecture instantanée du capteur (HIGH ou LOW) à chaque tour de boucle
+int etatCapteurPrecedent = HIGH; // Mémorise l'état du tour précédent (Initialisé à HIGH car un capteur IR au repos émet un signal HIGH)
 
-// --- Variables de gestion d'état ---
-int sensorState = 0;       // Stocke la lecture actuelle du capteur (HIGH ou LOW)
-int lastSensorState = 1;   // Stocke l'état précédent (initialisé à 1 car le capteur est HIGH au repos)
-bool relayActive = false;  // Variable "mémoire" : est-ce que notre système considère le relais comme actif ?
 
 void setup() {
-  // Configuration des sens de circulation du courant
-  pinMode(irSensor, INPUT);      // Le capteur envoie des informations à l'Arduino
-  pinMode(relayPin, OUTPUT);     // L'Arduino envoie des ordres au relais
+  // --- 3. CONFIGURATION MATÉRIELLE (Exécutée une seule fois au démarrage) ---
   
-  // INITIALISATION DU RELAIS :
-  // La plupart des modules relais sont "Active Low" (s'activent au signal LOW).
-  // On met donc la broche à HIGH au démarrage pour s'assurer que le relais est BIEN ÉTEINT.
-  digitalWrite(relayPin, HIGH); 
+  pinMode(brocheCapteur, INPUT);  // Met la broche 2 en mode "Écoute" (reçoit le signal du capteur)
+  pinMode(brocheRelais, OUTPUT);  // Met la broche 3 en mode "Action" (envoie du courant au relais)
+
+  // SÉCURITÉ : Sur un relais "Active-LOW", le repos (éteint) correspond à 5V (HIGH). 
+  // On applique immédiatement HIGH pour éviter que la lampe ne flashe un quart de seconde à l'allumage de l'Arduino.
+  digitalWrite(brocheRelais, HIGH); 
   
-  Serial.begin(9600);            // Ouvre le moniteur série pour le débogage
-  Serial.println("Systeme pret !");
+  Serial.begin(9600); // Ouvre le canal de communication avec le PC (vitesse : 9600 bits/seconde) pour le Moniteur Série
 }
 
+
 void loop() {
-  // 1. Lire ce qui se passe devant le capteur
-  sensorState = digitalRead(irSensor);
+  // --- 4. BOUCLE PRINCIPALE (Tourne à l'infini, des milliers de fois par seconde) ---
 
-  // 2. ANALYSE DU CHANGEMENT D'ÉTAT 
-  // On cherche le moment précis où l'objet arrive devant le capteur.
-  // C'est-à-dire quand on passe de "Rien" (HIGH) à "Obstacle" (LOW).
-  if (sensorState == LOW && lastSensorState == HIGH) { // Si le capteur passe à LOW(Obstacle détecté) alors qu'il etait à High (Au repos)
+  // On lit les valeurs envoyées par le capteur IR (S'il voit un obstacle = LOW, sinon = HIGH)
+  etatCapteurActuel = digitalRead(brocheCapteur);
+
+  // On ne déclenche l'action QUE si le capteur voit un obstacle (LOW) ET qu'au tour précédent il n'en voyait pas (HIGH).
+  // Cela évite que la lampe ne clignote en boucle si on laisse la main immobile devant le capteur.
+  if (etatCapteurActuel == LOW && etatCapteurPrecedent == HIGH) {
     
-    // On inverse l'état de notre variable mémoire (si c'était faux, ça devient vrai)
-    relayActive = !relayActive; 
+    // On inverse la valeur de la mémoire : si c'était true ça devient false, et inversement.
+    etatLampe = !etatLampe; 
 
-    // 3. ACTION SUR LE RELAIS
-    // Si relayActive est vrai (true), on envoie LOW pour fermer le contact du relais (Ce dernier agit ici comme un interrupteur).
-    // Si relayActive est faux (false), on envoie HIGH pour ouvrir le contact.
-    if (relayActive == true) {
-      digitalWrite(relayPin, LOW);  // Allume le relais
-      Serial.println("Relais : ACTIVE (ON)");
+    // On applique physiquement ce que la mémoire vient de décider :
+    if (etatLampe == true) {
+      
+      // Relais Active-LOW : on lui envoie 0V (LOW) pour fermer le circuit 220V et allumer l'ampoule
+      digitalWrite(brocheRelais, LOW); 
+      Serial.println("Lampe : ALLUMÉE");
+
     } else {
-      digitalWrite(relayPin, HIGH); // Éteint le relais
-      Serial.println("Relais : DESACTIVE (OFF)");
+      
+      // Relais Active-LOW : on lui envoie 5V (HIGH) pour rouvrir le circuit 220V et couper l'ampoule
+      digitalWrite(brocheRelais, HIGH);  
+      Serial.println("Lampe : ÉTEINTE");
+
     }
 
-    // 4. ANTI-REBOND (Debounce)
-    // Empêche le relais de "cliqueter" follement si le passage de l'objet est hésitant.
-    // On attend 500ms avant d'autoriser une nouvelle détection.
-    delay(500); 
+    // "Filtre anti-rebond" : on fige le microcontrôleur 0.3 seconde. 
+    // Sans ça, les micro-variations électriques au moment où ta main passe déclencheraient le "if" 4 fois de suite.
+    delay(300); 
   }
 
-  // 5. MÉMORISATION
-  // On enregistre l'état actuel pour comparer au prochain tour de boucle.
-  lastSensorState = sensorState;
+  // Étape cruciale pour le tour suivant : le "présent" d'aujourd'hui devient le "passé" de demain.
+  etatCapteurPrecedent = etatCapteurActuel;
 }
